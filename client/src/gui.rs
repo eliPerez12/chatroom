@@ -3,14 +3,15 @@ use std::sync::{Arc, Mutex};
 use eframe::egui;
 use egui::Separator;
 use rand::Rng;
-use shared::ClientMessage;
+use shared::*;
 
 pub struct ChatApp {
     state: AppState,
     username: String,
-    messages: Arc<Mutex<Vec<ClientMessage>>>,
+    messages: Arc<Mutex<Vec<MessageLog>>>,
     input_text: String,
-    user_message: Arc<Mutex<ClientMessage>>,
+    user_message: Arc<Mutex<Option<MessageLog>>>,
+    last_message_recived: Arc<Mutex<u32>>,
 }
 
 #[derive(PartialEq)]
@@ -19,15 +20,11 @@ enum AppState {
     ChatRoom,
 }
 
-struct Message {
-    sender: String,
-    message: String,
-}
-
 impl ChatApp {
     pub fn new(
-        user_message: Arc<Mutex<ClientMessage>>,
-        messages: Arc<Mutex<Vec<ClientMessage>>>,
+        user_message: Arc<Mutex<Option<MessageLog>>>,
+        messages: Arc<Mutex<Vec<MessageLog>>>,
+        last_message_recived: Arc<Mutex<u32>>,
     ) -> Self {
         let random_num = rand::thread_rng().gen_range(1000..9999);
         Self {
@@ -36,6 +33,7 @@ impl ChatApp {
             input_text: String::new(),
             username: format!("User{random_num}"),
             user_message,
+            last_message_recived,
         }
     }
 }
@@ -84,12 +82,10 @@ impl ChatApp {
                     .show(ui, |ui| {
                         let lock = self.messages.lock().unwrap();
                         for client_message in lock.iter() {
-                            match client_message {
-                                ClientMessage::None{..} => (),
-                                ClientMessage::Message { username, message } => {
-                                    ui.label(format!("[{}]: {}", username, message));
-                                }
-                            };
+                            ui.label(format!(
+                                "[{}]: {}",
+                                client_message.username, client_message.message
+                            ));
                         }
                     });
 
@@ -114,10 +110,10 @@ impl ChatApp {
 
     fn send_message(&mut self) {
         if !self.input_text.trim().is_empty() {
-            *self.user_message.lock().unwrap() = ClientMessage::Message {
+            *self.user_message.lock().unwrap() = Some(MessageLog {
                 username: self.username.clone(),
                 message: self.input_text.clone(),
-            };
+            });
             self.input_text.clear();
         }
     }

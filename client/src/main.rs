@@ -7,29 +7,32 @@ use std::{
 };
 
 use gui::ChatApp;
-use shared::ClientMessage;
+use shared::*;
 
 pub fn server_connection(
-    user_message: Arc<Mutex<ClientMessage>>,
-    messages: Arc<Mutex<Vec<ClientMessage>>>,
+    user_message: Arc<Mutex<Option<MessageLog>>>,
+    messages: Arc<Mutex<Vec<MessageLog>>>,
+    last_message_recived: Arc<Mutex<u32>>,
 ) {
     if let Ok(mut stream) = TcpStream::connect("127.0.0.1:6379") {
         println!("Connected to server.");
-        let mut buffer = [0; 1024];
+        let mut buffer = [0; 8192];
         loop {
             let mut lock = user_message.lock().unwrap();
-            let bytes = lock.serialize();
+            let user_message = lock.clone();
+            let bytes = bincode::serialize(&(user_message, *last_message_recived.lock().unwrap())).unwrap();
             if stream.write_all(&bytes).is_err() {
                 break;
             }
-            *lock = ClientMessage::None;
+            *lock = None;
             if stream.read(&mut buffer).is_err() {
                 break;
             }
-            let message = ClientMessage::deserialize(&buffer);
-            match message {
-                ClientMessage::None{..} => (),
-                ClientMessage::Message { .. } => messages.lock().unwrap().push(message),
+            let logs: MessageLogs = bincode::deserialize(&buffer).unwrap();
+            let mut lock = messages.lock().unwrap();
+            *lock = vec![];
+            for log in logs.messages {
+                lock.push(log)
             }
         }
     }
@@ -38,13 +41,19 @@ pub fn server_connection(
 mod gui;
 
 fn main() {
-    let user_message: Arc<Mutex<ClientMessage>> = Arc::new(Mutex::new(ClientMessage::None));
-    let messages: Arc<Mutex<Vec<ClientMessage>>> = Arc::new(Mutex::new(vec![]));
+    let user_message: Arc<Mutex<Option<MessageLog>>> = Arc::new(Mutex::new(None));
+    let messages: Arc<Mutex<Vec<MessageLog>>> = Arc::new(Mutex::new(vec![]));
+    let last_message_recived = Arc::new(Mutex::new(0));
 
     let user_message_clone = user_message.clone();
     let messages_clone = messages.clone();
+    let last_message_recived_clone = Arc::new(Mutex::new(0));
     std::thread::spawn(move || loop {
-        server_connection(user_message_clone.clone(), messages_clone.clone());
+        server_connection(
+            user_message_clone.clone(),
+            messages_clone.clone(),
+            last_message_recived_clone.clone(),
+        );
         println!("Attempting to connect to server...");
         std::thread::sleep(Duration::from_secs(3));
     });
@@ -53,7 +62,13 @@ fn main() {
     eframe::run_native(
         "Chat Room",
         options,
-        Box::new(|_cc| Ok(Box::new(ChatApp::new(user_message, messages)))),
+        Box::new(|_cc| {
+            Ok(Box::new(ChatApp::new(
+                user_message,
+                messages,
+                last_message_recived,
+            )))
+        }),
     )
     .unwrap();
 }
