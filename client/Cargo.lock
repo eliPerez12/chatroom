@@ -796,6 +796,7 @@ dependencies = [
  "eframe",
  "egui",
  "mini-redis",
+ "rand",
  "serde",
  "shared",
  "tokio",

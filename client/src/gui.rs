@@ -1,11 +1,16 @@
+use std::sync::{Arc, Mutex};
+
 use eframe::egui;
 use egui::Separator;
+use rand::Rng;
+use shared::ClientMessage;
 
 pub struct ChatApp {
     state: AppState,
     username: String,
-    messages: Vec<Message>,
+    messages: Arc<Mutex<Vec<ClientMessage>>>,
     input_text: String,
+    user_message: Arc<Mutex<ClientMessage>>,
 }
 
 #[derive(PartialEq)]
@@ -19,16 +24,18 @@ struct Message {
     message: String,
 }
 
-impl Default for ChatApp {
-    fn default() -> Self {
+impl ChatApp {
+    pub fn new(
+        user_message: Arc<Mutex<ClientMessage>>,
+        messages: Arc<Mutex<Vec<ClientMessage>>>,
+    ) -> Self {
+        let random_num = rand::thread_rng().gen_range(1000..9999);
         Self {
             state: AppState::Menu,
-            messages: vec![Message {
-                sender: "[Chatroom]".to_string(),
-                message: "Welcome to the chat room!".to_string(),
-            }],
+            messages,
             input_text: String::new(),
-            username: "Anonymous".to_string(),
+            username: format!("User{random_num}"),
+            user_message,
         }
     }
 }
@@ -48,6 +55,7 @@ impl ChatApp {
             ui.vertical_centered(|ui| {
                 ui.heading(format!("Welcome to the Chat Room, {}!", self.username));
                 ui.add(Separator::default().horizontal().spacing(10.0));
+                ui.label("Please enter a name.");
                 let input =
                     egui::TextEdit::singleline(&mut self.username).hint_text("Enter a username...");
                 ui.add(input);
@@ -70,12 +78,18 @@ impl ChatApp {
 
                 // Display messages in a scrollable area
                 egui::ScrollArea::vertical()
-                    .auto_shrink([false, true])
+                    .auto_shrink([false, false])
                     .stick_to_bottom(true)
                     .max_height(available_height)
                     .show(ui, |ui| {
-                        for msg in &self.messages {
-                            ui.label(format!("{}: {}", msg.sender, msg.message));
+                        let lock = self.messages.lock().unwrap();
+                        for client_message in lock.iter() {
+                            match client_message {
+                                ClientMessage::None{..} => (),
+                                ClientMessage::Message { username, message } => {
+                                    ui.label(format!("[{}]: {}", username, message));
+                                }
+                            };
                         }
                     });
 
@@ -100,10 +114,10 @@ impl ChatApp {
 
     fn send_message(&mut self) {
         if !self.input_text.trim().is_empty() {
-            self.messages.push(Message {
-                sender: self.username.clone(),
+            *self.user_message.lock().unwrap() = ClientMessage::Message {
+                username: self.username.clone(),
                 message: self.input_text.clone(),
-            });
+            };
             self.input_text.clear();
         }
     }

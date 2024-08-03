@@ -1,4 +1,3 @@
-use mini_redis::Frame;
 use serde::{Deserialize, Serialize};
 
 
@@ -11,16 +10,15 @@ pub enum ClientMessage {
     }
 }
 
+
+
 impl ClientMessage {
-    pub fn to_frame(&self) -> Frame {
-        Frame::Bulk(bincode::serialize(&self).unwrap().into())
+    pub fn serialize(&self) -> Vec<u8> {
+        bincode::serialize(&self).unwrap()
         
     }
 
-    pub fn from_frame(frame: &Frame) -> Self {
-        match frame {
-            Frame::Bulk(ref bytes) => bincode::deserialize(bytes).unwrap(),
-            _ => unreachable!(), 
-        }
+    pub fn deserialize(bytes: &[u8]) -> Self {
+        bincode::deserialize(bytes).unwrap()
     }
 }
