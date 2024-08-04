@@ -16,7 +16,7 @@ pub fn server_connection(
 ) {
     if let Ok(mut stream) = TcpStream::connect("127.0.0.1:6379") {
         println!("Connected to server.");
-        let mut buffer = [0; 8192];
+        let mut buffer = [0; 2048];
         loop {
             let mut lock = user_message.lock().unwrap();
             let user_message = lock.clone();
